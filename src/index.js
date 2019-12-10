@@ -17,9 +17,7 @@ window.DatoCmsPlugin.init((plugin) => {
   plugin.startAutoResizer();
 
   let oldValue = plugin.getFieldValue(plugin.fieldPath);
-  console.log(oldValue);
   plugin.setFieldValue(plugin.fieldPath, sanitize(oldValue));
-  console.log(sanitize(oldValue));
 
   plugin.addFieldChangeListener(plugin.fieldPath, (newValue) => {
     let newV = newValue;
