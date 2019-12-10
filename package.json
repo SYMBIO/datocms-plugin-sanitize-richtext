@@ -62,7 +62,7 @@
     "serve": "^10.0.2",
     "webpack": "^4.16.1",
     "webpack-cli": "^3.1.0",
-    "webpack-dev-server": "^3.1.10",
+    "webpack-dev-server": "^3.1.11",
     "yo": "^2.0.5"
   },
   "dependencies": {
