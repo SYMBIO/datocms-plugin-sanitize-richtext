@@ -8,6 +8,7 @@ function sanitize(text) {
       'iframe'],
     allowedAttributes: {
       a: ['href', 'name', 'target'],
+      iframe: ['src'],
     },
     allowedIframeHostnames: ['www.youtube.com'],
   });
