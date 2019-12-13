@@ -1,9 +1,9 @@
 {
   "name": "datocms-plugin-sanitize-richtext",
   "homepage": "https://github.com/SYMBIO/datocms-plugin-sanitize-richtext",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Remove styles copied from MS Word and others",
-  "main": "index.js",
+  "main": "public/bundle.js",
   "scripts": {
     "start": "concurrently \"yarn dev\" \"yarn localtunnel\"",
     "localtunnel": "lt -s datocms-plugin-datocms-plugin-sanitize-richtext --port 5000",
