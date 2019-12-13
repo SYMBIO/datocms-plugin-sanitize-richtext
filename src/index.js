@@ -11,6 +11,9 @@ function sanitize(text) {
       iframe: ['src'],
     },
     allowedIframeHostnames: ['www.youtube.com'],
+    parser: {
+      decodeEntities: false
+    }
   });
 }
 
