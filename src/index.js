@@ -12,8 +12,8 @@ function sanitize(text) {
     },
     allowedIframeHostnames: ['www.youtube.com'],
     parser: {
-      decodeEntities: false
-    }
+      decodeEntities: false,
+    },
   });
 }
 
