@@ -4,7 +4,7 @@ Remove styles copied from MS Word and others
 
 ## Configuration
 
-[Describe/screenshot any global/instance parameters this plugin requires]
+No configuration needed.
 
 ## Development
 

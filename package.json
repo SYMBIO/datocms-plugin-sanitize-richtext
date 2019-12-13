@@ -1,7 +1,7 @@
 {
   "name": "datocms-plugin-sanitize-richtext",
   "homepage": "https://github.com/SYMBIO/datocms-plugin-sanitize-richtext",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "description": "Remove styles copied from MS Word and others",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "dev": "NODE_ENV=development webpack-dev-server --port 5000",
     "dist": "NODE_ENV=production webpack --progress",
     "build": "NODE_ENV=production webpack --progress",
-    "prepublishOnly": "rimraf lib dist && mkdir dist && npm run dist",
+    "prepublishOnly": "rimraf lib public && mkdir public && npm run dist",
     "addToProject": "yo datocms-plugin:add-to-project",
     "test": "echo 1"
   },
@@ -30,7 +30,7 @@
     "title": "Sanitize Richtext",
     "previewImage": "docs/preview.gif",
     "coverImage": "docs/cover.png",
-    "entryPoint": "dist/index.html",
+    "entryPoint": "public/index.html",
     "pluginType": "field_addon",
     "fieldTypes": [
       "text"
