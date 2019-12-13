@@ -25,6 +25,7 @@ window.DatoCmsPlugin.init((plugin) => {
     if (levenshtein(newValue, oldValue) > 10) {
       newV = sanitize(newV);
       if (newV !== oldValue) {
+        console.log(newV, oldValue, levenshtein(newValue, oldValue));
         plugin.setFieldValue(plugin.fieldPath, newV);
       }
     }
