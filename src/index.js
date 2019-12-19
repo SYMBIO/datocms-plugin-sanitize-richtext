@@ -2,19 +2,23 @@ const levenshtein = require('js-levenshtein');
 const sanitizeHtml = require('sanitize-html');
 
 function sanitize(text) {
-  return sanitizeHtml(text, {
-    allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 'li', 'b',
-      'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td',
-      'iframe'],
-    allowedAttributes: {
-      a: ['href', 'name', 'target'],
-      iframe: ['src'],
-    },
-    allowedIframeHostnames: ['www.youtube.com'],
-    parser: {
-      decodeEntities: false,
-    },
-  });
+  if (text) {
+    return sanitizeHtml(text, {
+      allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 'li',
+        'b',
+        'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td',
+        'iframe'],
+      allowedAttributes: {
+        a: ['href', 'name', 'target'],
+        iframe: ['src'],
+      },
+      allowedIframeHostnames: ['www.youtube.com'],
+      parser: {
+        decodeEntities: false,
+      },
+    });
+  }
+  return text;
 }
 
 window.DatoCmsPlugin.init((plugin) => {
