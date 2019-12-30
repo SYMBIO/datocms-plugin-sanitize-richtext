@@ -5,12 +5,12 @@ function sanitize(text) {
   if (text) {
     return sanitizeHtml(text, {
       allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 'li',
-        'b',
-        'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td',
-        'iframe'],
+        'b', 'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tr', 'th',
+        'td', 'iframe', 'img'],
       allowedAttributes: {
         a: ['href', 'name', 'target'],
         iframe: ['src'],
+        img: ['src', 'alt', 'title', 'width', 'height'],
       },
       allowedIframeHostnames: ['www.youtube.com'],
       parser: {
