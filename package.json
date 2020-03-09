@@ -21,7 +21,7 @@
     "text-field"
   ],
   "files": [
-    "dist",
+    "public",
     "docs"
   ],
   "author": "SYMBIO <dev@symbio.agency>",
