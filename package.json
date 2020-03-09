@@ -1,7 +1,7 @@
 {
   "name": "datocms-plugin-sanitize-richtext",
   "homepage": "https://github.com/SYMBIO/datocms-plugin-sanitize-richtext",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Remove styles copied from MS Word and others",
   "main": "public/bundle.js",
   "scripts": {
