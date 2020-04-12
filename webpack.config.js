@@ -45,10 +45,10 @@ module.exports = {
     }),
     new HtmlWebpackTagsPlugin({
       tags: [
-        'https:////unpkg.com/datocms-plugins-sdk/dist/sdk.js',
-        'https:////unpkg.com/datocms-plugins-sdk/dist/sdk.css',
+        'https://unpkg.com/datocms-plugins-sdk/dist/sdk.js',
+        'https://unpkg.com/datocms-plugins-sdk/dist/sdk.css',
       ],
-      append: true,
+      append: false,
     }),
   ].filter(Boolean),
 };
