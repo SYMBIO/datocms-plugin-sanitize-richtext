@@ -1,7 +1,7 @@
 {
   "name": "datocms-plugin-sanitize-richtext",
   "homepage": "https://github.com/SYMBIO/datocms-plugin-sanitize-richtext",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Remove styles copied from MS Word and others",
   "main": "public/bundle.js",
   "scripts": {
@@ -54,9 +54,9 @@
     "eslint-loader": "^3.0.3",
     "eslint-plugin-import": "^2.20.1",
     "generator-datocms-plugin": "^1.0.20",
-    "html-webpack-tags-plugin": "^2.0.17",
     "html-webpack-inline-source-plugin": "^0.0.10",
     "html-webpack-plugin": "^3.2.0",
+    "html-webpack-tags-plugin": "^2.0.17",
     "localtunnel": "^2.0.0",
     "mini-css-extract-plugin": "^0.9.0",
     "serve": "^11.3.0",
