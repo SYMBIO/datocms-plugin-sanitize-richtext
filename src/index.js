@@ -28,9 +28,8 @@ window.DatoCmsPlugin.init((plugin) => {
   plugin.setFieldValue(plugin.fieldPath, sanitize(oldValue));
 
   plugin.addFieldChangeListener(plugin.fieldPath, (newValue) => {
-    console.log('change');
     let newV = newValue;
-    if (levenshtein(newValue, oldValue) > 10) {
+    if (!oldValue || !newValue || levenshtein(newValue, oldValue) > 10) {
       newV = sanitize(newV);
       if (newV !== oldValue) {
         plugin.setFieldValue(plugin.fieldPath, newV);
