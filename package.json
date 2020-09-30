@@ -1,7 +1,7 @@
 {
   "name": "datocms-plugin-sanitize-richtext",
   "homepage": "https://github.com/SYMBIO/datocms-plugin-sanitize-richtext",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Remove styles copied from MS Word and others",
   "main": "public/bundle.js",
   "scripts": {
@@ -41,32 +41,32 @@
     }
   },
   "devDependencies": {
-    "@babel/cli": "^7.8.4",
-    "@babel/core": "^7.8.7",
-    "@babel/preset-env": "^7.8.7",
-    "@babel/register": "^7.8.6",
+    "@babel/cli": "^7.11.6",
+    "@babel/core": "^7.11.6",
+    "@babel/preset-env": "^7.11.5",
+    "@babel/register": "^7.11.5",
     "babel-eslint": "^10.1.0",
-    "babel-loader": "^8.0.6",
-    "concurrently": "^5.1.0",
-    "eslint": "^6.8.0",
-    "eslint-config-airbnb-base": "^14.0.0",
-    "eslint-import-resolver-webpack": "^0.12.1",
-    "eslint-loader": "^3.0.3",
-    "eslint-plugin-import": "^2.20.1",
-    "generator-datocms-plugin": "^1.0.20",
+    "babel-loader": "^8.1.0",
+    "concurrently": "^5.3.0",
+    "eslint": "^7.10.0",
+    "eslint-config-airbnb-base": "^14.2.0",
+    "eslint-import-resolver-webpack": "^0.13.0",
+    "eslint-loader": "^4.0.2",
+    "eslint-plugin-import": "^2.22.1",
+    "generator-datocms-plugin": "^1.0.26",
     "html-webpack-inline-source-plugin": "^0.0.10",
-    "html-webpack-plugin": "^3.2.0",
+    "html-webpack-plugin": "^4.5.0",
     "html-webpack-tags-plugin": "^2.0.17",
     "localtunnel": "^2.0.0",
-    "mini-css-extract-plugin": "^0.9.0",
-    "serve": "^11.3.0",
-    "webpack": "^4.42.0",
-    "webpack-cli": "^3.3.11",
-    "webpack-dev-server": "^3.10.3",
+    "mini-css-extract-plugin": "^0.11.2",
+    "serve": "^11.3.2",
+    "webpack": "^4.44.2",
+    "webpack-cli": "^3.3.12",
+    "webpack-dev-server": "^3.11.0",
     "yo": "^3.1.1"
   },
   "dependencies": {
     "js-levenshtein": "^1.1.6",
-    "sanitize-html": "^1.22.0"
+    "sanitize-html": "^2.0.0"
   }
 }
