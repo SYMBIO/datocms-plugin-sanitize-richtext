@@ -16,6 +16,9 @@ function sanitize(text) {
       parser: {
         decodeEntities: false,
       },
+      transformTags: {
+        div: 'p',
+      },
     });
   }
   return text;
