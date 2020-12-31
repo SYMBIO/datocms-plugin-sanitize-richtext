@@ -8,7 +8,7 @@ function sanitize(text) {
         'b', 'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tr', 'th',
         'td', 'iframe', 'img'],
       allowedAttributes: {
-        a: ['href', 'name', 'target'],
+        a: ['href', 'name', 'target', 'rel'],
         iframe: ['src'],
         img: ['src', 'alt', 'title', 'width', 'height'],
       },
