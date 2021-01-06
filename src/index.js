@@ -12,7 +12,7 @@ function sanitize(text) {
         iframe: ['src'],
         img: ['src', 'alt', 'title', 'width', 'height'],
       },
-      allowedIframeHostnames: ['www.youtube.com'],
+      allowedIframeHostnames: ['www.youtube.com', 'www.podbean.com'],
       parser: {
         decodeEntities: false,
       },
