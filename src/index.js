@@ -9,7 +9,7 @@ function sanitize(text) {
         'td', 'iframe', 'img'],
       allowedAttributes: {
         a: ['href', 'name', 'target', 'rel'],
-        iframe: ['src'],
+        iframe: ['src', 'width', 'height', 'data-name'],
         img: ['src', 'alt', 'title', 'width', 'height'],
       },
       allowedIframeHostnames: ['www.youtube.com', 'www.podbean.com'],
