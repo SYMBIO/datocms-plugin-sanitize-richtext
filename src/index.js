@@ -11,6 +11,8 @@ function sanitize(text) {
         a: ['href', 'name', 'target', 'rel'],
         iframe: ['src', 'width', 'height', 'data-name'],
         img: ['src', 'alt', 'title', 'width', 'height'],
+        th: ['colspan', 'rowspan', 'scope', 'style'],
+        td: ['colspan', 'rowspan', 'scope', 'style'],
       },
       allowedIframeHostnames: ['www.youtube.com', 'www.podbean.com'],
       parser: {
