@@ -1,45 +1,26 @@
-const levenshtein = require('js-levenshtein');
-const sanitizeHtml = require('sanitize-html');
-
-function sanitize(text) {
-  if (text) {
-    return sanitizeHtml(text, {
-      allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 'li',
-        'b', 'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tfoot',
-        'tr', 'th', 'td', 'iframe', 'img', 'button'],
-      allowedAttributes: {
-        a: ['href', 'name', 'target', 'rel', 'title'],
-        iframe: ['src', 'width', 'height', 'data-name'],
-        img: ['src', 'alt', 'title', 'width', 'height'],
-        th: ['colspan', 'rowspan', 'scope', 'style'],
-        td: ['colspan', 'rowspan', 'scope', 'style'],
-      },
-      allowedIframeHostnames: ['www.youtube.com', 'www.podbean.com'],
-      parser: {
-        decodeEntities: false,
-      },
-      transformTags: {
-        div: 'p',
-      },
-    });
-  }
-  return text;
-}
+const { sanitize } = require('./sanitize');
 
 window.DatoCmsPlugin.init((plugin) => {
   plugin.startAutoResizer();
 
-  let oldValue = plugin.getFieldValue(plugin.fieldPath);
-  plugin.setFieldValue(plugin.fieldPath, sanitize(oldValue));
+  // Track the last value we have sanitized so that the change listener can
+  // recognise (and ignore) the echo coming from our own `setFieldValue` call.
+  let lastSanitized = sanitize(plugin.getFieldValue(plugin.fieldPath));
+  if (lastSanitized !== plugin.getFieldValue(plugin.fieldPath)) {
+    plugin.setFieldValue(plugin.fieldPath, lastSanitized);
+  }
 
   plugin.addFieldChangeListener(plugin.fieldPath, (newValue) => {
-    let newV = newValue;
-    if (!oldValue || !newValue || levenshtein(newValue, oldValue) > 10) {
-      newV = sanitize(newV);
-      if (newV !== oldValue) {
-        plugin.setFieldValue(plugin.fieldPath, newV);
-      }
+    if (newValue === lastSanitized) return;
+
+    const sanitized = sanitize(newValue);
+    // Update the guard BEFORE writing back so that a synchronous re-entry of
+    // this listener (some editor integrations call listeners synchronously)
+    // hits the early-return above instead of running sanitize twice.
+    lastSanitized = sanitized;
+
+    if (sanitized !== newValue) {
+      plugin.setFieldValue(plugin.fieldPath, sanitized);
     }
-    oldValue = newV;
   });
 });
