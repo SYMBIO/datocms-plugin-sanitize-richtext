@@ -3,6 +3,16 @@ import { createRoot } from 'react-dom/client';
 import { useEffect, useRef, useState } from 'react';
 import { sanitize } from './sanitize';
 
+/* ─── Cross-iframe coordination keys ────────────────────────────────────── */
+
+// BroadcastChannel used to signal between background iframe (beforeSave)
+// and field-extension render iframes (SanitizeAddon).
+const BC_NAME = 'sanitize-richtext-v1';
+
+// sessionStorage keys (shared by all same-origin iframes in this tab).
+const SK_AUTOSAVE = 'srt-autosave-needed'; // set by beforeSave to request auto-save
+const SK_CLEAN    = 'srt-clean-save';      // set by render addon before saveCurrentItem
+
 /* ─── Status bar component ───────────────────────────────────────────────── */
 
 const BAR_STYLES = {
@@ -20,6 +30,7 @@ const BAR_STYLES = {
 const THEMES = {
   sanitizing: { background: '#fff3cd', borderColor: '#ffc107', color: '#856404' },
   done: { background: '#e6f4ea', borderColor: '#a8d5b5', color: '#1e7e34' },
+  saving: { background: '#cfe2ff', borderColor: '#9ec5fe', color: '#084298' },
 };
 
 function StatusBar({ theme, icon, msg }) {
@@ -31,7 +42,7 @@ function StatusBar({ theme, icon, msg }) {
   );
 }
 
-/* ─── Field addon React component ────────────────────────────────────────── */
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
 
 // ctx.fieldPath can be 'body' (non-localized) or 'body.cs' (localized).
 // ctx.formValues uses NESTED objects for localized fields:
@@ -44,20 +55,114 @@ function getFormValue(formValues, fieldPath) {
   );
 }
 
+function ssGet(key) {
+  try { return sessionStorage.getItem(key); } catch (e) { return null; }
+}
+function ssSet(key, val) {
+  try { sessionStorage.setItem(key, val); } catch (e) { /* */ }
+}
+function ssRemove(key) {
+  try { sessionStorage.removeItem(key); } catch (e) { /* */ }
+}
+
+function bcPost(msg) {
+  try {
+    const bc = new BroadcastChannel(BC_NAME);
+    bc.postMessage(msg);
+    bc.close();
+  } catch (e) { /* BroadcastChannel not supported */ }
+}
+
+/* ─── Field addon React component ────────────────────────────────────────── */
+
 function SanitizeAddon({ ctx }) {
   const [status, setStatus] = useState(null);
   const lastCleanRef = useRef(null);
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
+  // Set to true when beforeSave signals that save was blocked and we should
+  // trigger a new save automatically once the content is clean.
+  const autoSaveRef = useRef(false);
+  // Debounce timer for auto-save (lets other render iframes finish cleaning first).
+  const autoSaveTimerRef = useRef(null);
 
   const fieldValue = getFormValue(ctx.formValues, ctx.fieldPath);
 
   console.log('[sanitize-richtext] SanitizeAddon render', {
     fieldPath: ctx.fieldPath,
     valueLength: typeof fieldValue === 'string' ? fieldValue.length : typeof fieldValue,
-    lastClean: lastCleanRef.current ? `${lastCleanRef.current.substring(0, 60)}…` : null,
+    hasSaveCurrentItem: typeof ctx.saveCurrentItem === 'function',
+    autoSave: autoSaveRef.current,
     status,
   });
+
+  // Trigger a debounced auto-save once everything is clean.
+  // Uses a mutex (sessionStorage) so only ONE render iframe actually calls
+  // saveCurrentItem even if multiple iframes finish cleaning around the same time.
+  function scheduleAutoSave() {
+    if (!autoSaveRef.current) return;
+    if (typeof ctxRef.current.saveCurrentItem !== 'function') {
+      console.warn('[sanitize-richtext] saveCurrentItem not available, cannot auto-save');
+      return;
+    }
+    clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      // Try to claim the auto-save slot (first iframe wins).
+      if (ssGet(SK_AUTOSAVE) !== '1') return; // already claimed by another iframe
+      ssRemove(SK_AUTOSAVE);
+      autoSaveRef.current = false;
+
+      setStatus('saving');
+      ssSet(SK_CLEAN, '1');
+      console.log('[sanitize-richtext] auto-save triggered...');
+      ctxRef.current.saveCurrentItem().then(() => {
+        console.log('[sanitize-richtext] auto-save ✓');
+        setStatus(null);
+      }).catch((err) => {
+        console.error('[sanitize-richtext] auto-save error', err);
+        setStatus(null);
+      }).finally(() => {
+        ssRemove(SK_CLEAN);
+      });
+    }, 400); // 400 ms lets other render iframes finish their setFieldValue calls
+  }
+
+  // Listen for "save was blocked" broadcasts from beforeSave.
+  // Also check sessionStorage on mount in case the message was sent before this
+  // component was ready.
+  useEffect(() => {
+    if (ssGet(SK_AUTOSAVE) === '1') {
+      console.log('[sanitize-richtext] found pending auto-save on mount');
+      autoSaveRef.current = true;
+      // If value is already clean, schedule immediately
+      if (typeof fieldValue === 'string' && sanitize(fieldValue) === fieldValue) {
+        scheduleAutoSave();
+      }
+    }
+
+    let bc;
+    try {
+      bc = new BroadcastChannel(BC_NAME);
+      bc.onmessage = ({ data }) => {
+        if (data.type === 'save-blocked') {
+          console.log('[sanitize-richtext] received save-blocked broadcast');
+          autoSaveRef.current = true;
+          // If current value is already clean, schedule auto-save now.
+          const cur = getFormValue(ctxRef.current.formValues, ctxRef.current.fieldPath);
+          if (typeof cur === 'string' && sanitize(cur) === cur) {
+            scheduleAutoSave();
+          }
+          // Otherwise scheduleAutoSave will be called after setFieldValue resolves.
+        }
+      };
+    } catch (e) { /* BroadcastChannel not supported */ }
+
+    return () => {
+      clearTimeout(autoSaveTimerRef.current);
+      try { if (bc) bc.close(); } catch (e) { /* */ }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (typeof fieldValue !== 'string') {
@@ -66,6 +171,8 @@ function SanitizeAddon({ ctx }) {
     }
     if (fieldValue === lastCleanRef.current) {
       console.log('[sanitize-richtext] value unchanged since last clean, skipping');
+      // Value is already clean; if auto-save is pending, trigger it.
+      scheduleAutoSave();
       return;
     }
 
@@ -84,7 +191,8 @@ function SanitizeAddon({ ctx }) {
         .then(() => {
           console.log('[sanitize-richtext] setFieldValue resolved ✓');
           setStatus('done');
-          setTimeout(() => setStatus(null), 8000);
+          setTimeout(() => setStatus(null), 5000);
+          scheduleAutoSave(); // trigger auto-save if beforeSave requested it
         })
         .catch((err) => {
           console.error('[sanitize-richtext] setFieldValue error', err);
@@ -93,6 +201,7 @@ function SanitizeAddon({ ctx }) {
     } else {
       lastCleanRef.current = fieldValue;
       setStatus(null);
+      scheduleAutoSave();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldValue]);
@@ -100,8 +209,11 @@ function SanitizeAddon({ ctx }) {
   if (status === 'sanitizing') {
     return <StatusBar theme="sanitizing" icon="⏳" msg="Čistenie formátovania..." />;
   }
+  if (status === 'saving') {
+    return <StatusBar theme="saving" icon="💾" msg="Ukladám vyčistený obsah..." />;
+  }
   if (status === 'done') {
-    return <StatusBar theme="done" icon="✓" msg="Formátovanie vyčistené — teraz môžete uložiť." />;
+    return <StatusBar theme="done" icon="✓" msg="Formátovanie vyčistené." />;
   }
   return null;
 }
@@ -115,7 +227,7 @@ function renderExtension(id, ctx) {
     id,
     fieldPath: ctx.fieldPath,
     fieldType: ctx.field && ctx.field.attributes && ctx.field.attributes.field_type,
-    formValueKeys: Object.keys(ctx.formValues || {}),
+    hasSaveCurrentItem: typeof ctx.saveCurrentItem === 'function',
     mode: ctx.mode,
   });
 
@@ -139,35 +251,28 @@ function renderExtension(id, ctx) {
 
 /* ─── Before-save sanitization ───────────────────────────────────────────── */
 
+// Module-level flag for same-iframe auto-save re-entry guard.
 let savingClean = false;
 
 async function beforeSave(payload, ctx) {
-  // Log the full payload and available ctx methods so we can diagnose
   const payloadAttrs = payload?.data?.attributes ?? {};
+
+  // Allow if this is our own clean re-save (signalled via sessionStorage or module flag)
+  if (savingClean || ssGet(SK_CLEAN) === '1') {
+    console.log('[sanitize-richtext] clean re-save pass-through, allowing');
+    return true;
+  }
+
   console.log('[sanitize-richtext] onBeforeItemUpsert fired', {
-    savingClean,
     payloadDataType: payload?.data?.type,
     payloadAttributeKeys: Object.keys(payloadAttrs),
     hasSetFieldValue: typeof ctx.setFieldValue === 'function',
     hasSaveCurrentItem: typeof ctx.saveCurrentItem === 'function',
     hasNotice: typeof ctx.notice === 'function',
-    hasAlert: typeof ctx.alert === 'function',
-    hasFormValues: !!ctx.formValues,
   });
-  // Log full payload for structure inspection (truncate large strings)
-  console.log('[sanitize-richtext] payload attributes:', JSON.stringify(payloadAttrs, (k, v) => (typeof v === 'string' && v.length > 200 ? `${v.substring(0, 200)}…` : v), 2));
 
-  if (savingClean) {
-    console.log('[sanitize-richtext] savingClean=true, allowing save through');
-    return true;
-  }
-
-  // IMPORTANT: check the PAYLOAD (what DatoCMS will actually send to the API),
-  // not ctx.formValues. formValues may already be CLEAN because the render
-  // addon called setFieldValue() — but DatoCMS saves using the payload that
-  // was built when Save was clicked (from CKEditor's blur onChange = DIRTY).
-  //
-  // Recurse into nested objects AND arrays so we catch text inside blocks.
+  // Check for dirty HTML in every string value inside the payload,
+  // recursing into arrays (modular blocks) and nested objects.
   const dirty = [];
 
   function checkPayloadValue(path, value) {
@@ -206,50 +311,48 @@ async function beforeSave(payload, ctx) {
     return true;
   }
 
-  console.warn('[sanitize-richtext] BLOCKING save — dirty fields in payload:', dirty.map((d) => d.path));
+  console.warn('[sanitize-richtext] BLOCKING save — dirty fields:', dirty.map((d) => d.path));
 
-  // Best case: setFieldValue + saveCurrentItem available → auto-clean and re-save
+  // Best-case: setFieldValue + saveCurrentItem available in this context
+  // (only happens when the SDK gives a full ctx, which may depend on DatoCMS version).
   if (typeof ctx.setFieldValue === 'function' && typeof ctx.saveCurrentItem === 'function') {
-    console.log('[sanitize-richtext] setFieldValue + saveCurrentItem available, applying...');
+    console.log('[sanitize-richtext] full ctx available — cleaning and re-saving...');
     for (const { path, clean } of dirty) {
-      console.log('[sanitize-richtext] setFieldValue', path);
       // eslint-disable-next-line no-await-in-loop
       await ctx.setFieldValue(path, clean);
     }
     savingClean = true;
+    ssSet(SK_CLEAN, '1');
     try {
-      console.log('[sanitize-richtext] saveCurrentItem...');
       await ctx.saveCurrentItem(true);
-      console.log('[sanitize-richtext] saveCurrentItem ✓');
+      console.log('[sanitize-richtext] re-save ✓');
     } finally {
       savingClean = false;
+      ssRemove(SK_CLEAN);
     }
-    return false; // block the original dirty save (clean version was just saved)
+    return false; // block the original dirty save; the clean one was just triggered
   }
 
-  // setFieldValue/saveCurrentItem not available — block this save via return false.
-  // The render addon is already calling setFieldValue(CLEAN) asynchronously;
-  // by the time the user clicks Save again the content will be clean.
-  // Use ctx.notice() (non-blocking toast) so the hook returns immediately
-  // and DatoCMS doesn't show the "operation taking longer" timeout warning.
-  console.warn('[sanitize-richtext] setFieldValue/saveCurrentItem not available, blocking with notice');
+  // setFieldValue not available in this hook context (typical for DatoCMS render iframes).
+  // Signal the render addon instances via sessionStorage + BroadcastChannel so they
+  // will call saveCurrentItem() once their setFieldValue(clean) has resolved.
+  ssSet(SK_AUTOSAVE, '1');
+  bcPost({ type: 'save-blocked' });
+
   if (typeof ctx.notice === 'function') {
-    ctx.notice('Formátovanie bolo vyčistené. Uložte znova.'); // non-blocking toast
+    ctx.notice('Formátovanie sa čistí, uloží sa automaticky...');
   }
+
+  console.log('[sanitize-richtext] returning false — render addons will auto-save once clean');
   return false;
 }
 
 /* ─── Plugin entry point ─────────────────────────────────────────────────── */
 
 console.log('[sanitize-richtext] loading plugin, calling connect()...');
-console.log('[sanitize-richtext] is in iframe:', window.self !== window.top);
-console.log('[sanitize-richtext] window.DatoCmsPlugin (old SDK):', typeof window.DatoCmsPlugin);
 
 connect({
   overrideFieldExtensions(field, ctx) {
-    // Apply to all multiple-paragraph text fields (HTML/WYSIWYG),
-    // including text fields inside block models.
-    // Only exclude: string (single-line), structured_text, rich_text, etc.
     if (field.attributes.field_type !== 'text') return undefined;
 
     const itemTypeId = field.relationships.item_type.data.id;
