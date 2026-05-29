@@ -51,6 +51,19 @@ window.DatoCmsPlugin.init((plugin) => {
   const initialSanitized = sanitize(initial);
   if (initialSanitized !== initial) {
     console.warn('[sanitize-richtext] dirty content on load, sanitizing immediately', { fieldPath: plugin.fieldPath });
+    console.group('[sanitize-richtext] LOAD — value diff');
+    console.log('INPUT :', initial);
+    console.log('OUTPUT:', initialSanitized);
+    // Show character-level first difference to diagnose subtle whitespace/entity issues
+    for (let i = 0; i < Math.max(initial.length, initialSanitized.length); i += 1) {
+      if (initial[i] !== initialSanitized[i]) {
+        console.log('First diff at index', i,
+          '| input char:', JSON.stringify(initial.substring(i, i + 40)),
+          '| output char:', JSON.stringify(initialSanitized.substring(i, i + 40)));
+        break;
+      }
+    }
+    console.groupEnd();
     applySanitized(initialSanitized);
     showBar('✓', 'Formátovanie bolo vyčistené — uložte záznam.', '#e6f4ea', '#1e7e34', null);
   } else {
@@ -68,6 +81,18 @@ window.DatoCmsPlugin.init((plugin) => {
     if (sanitized !== newValue) {
       // Show feedback immediately so the editor knows cleanup is pending.
       console.warn('[sanitize-richtext] dirty content detected, will sanitize after CKEditor settles');
+      console.group('[sanitize-richtext] CHANGE — value diff');
+      console.log('INPUT :', newValue);
+      console.log('OUTPUT:', sanitized);
+      for (let i = 0; i < Math.max(newValue.length, sanitized.length); i += 1) {
+        if (newValue[i] !== sanitized[i]) {
+          console.log('First diff at index', i,
+            '| input char:', JSON.stringify(newValue.substring(i, i + 40)),
+            '| output char:', JSON.stringify(sanitized.substring(i, i + 40)));
+          break;
+        }
+      }
+      console.groupEnd();
       showBar('⏳', 'Čistenie formátovania z Wordu/Outlooku...', '#fff3cd', '#856404', null);
 
       // Debounce: reset the timer on every incoming dirty event.
