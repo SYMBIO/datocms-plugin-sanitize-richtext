@@ -33,10 +33,6 @@ window.DatoCmsPlugin.init((plugin) => {
   plugin.startAutoResizer();
 
   let lastSanitized = null;
-
-  // Debounce timer for setFieldValue. We wait for CKEditor to finish all its
-  // debounced onChange events and then write the clean value LAST, so our
-  // write wins over CKEditor's dirty echo when the user clicks Save.
   let sanitizeTimer = null;
 
   function applySanitized(sanitized) {
@@ -45,71 +41,59 @@ window.DatoCmsPlugin.init((plugin) => {
     plugin.setFieldValue(plugin.fieldPath, sanitized);
   }
 
-  // On load CKEditor is not yet in "active edit" mode, so setFieldValue is
-  // accepted immediately — no debounce needed here.
-  const initial = plugin.getFieldValue(plugin.fieldPath);
-  const initialSanitized = sanitize(initial);
-  if (initialSanitized !== initial) {
-    console.warn('[sanitize-richtext] dirty content on load, sanitizing immediately', { fieldPath: plugin.fieldPath });
-    console.group('[sanitize-richtext] LOAD — value diff');
-    console.log('INPUT :', initial);
-    console.log('OUTPUT:', initialSanitized);
-    // Show character-level first difference to diagnose subtle whitespace/entity issues
-    for (let i = 0; i < Math.max(initial.length, initialSanitized.length); i += 1) {
-      if (initial[i] !== initialSanitized[i]) {
-        console.log('First diff at index', i,
-          '| input char:', JSON.stringify(initial.substring(i, i + 40)),
-          '| output char:', JSON.stringify(initialSanitized.substring(i, i + 40)));
-        break;
-      }
-    }
-    console.groupEnd();
-    applySanitized(initialSanitized);
-    showBar('✓', 'Formátovanie bolo vyčistené — uložte záznam.', '#e6f4ea', '#1e7e34', null);
-  } else {
-    console.log('[sanitize-richtext] content is clean on load ✓', { fieldPath: plugin.fieldPath });
-    lastSanitized = initial;
-  }
+  /**
+   * Single entry point for both the initial load value and every subsequent
+   * field change. Both go through the same 800 ms debounce so that our
+   * setFieldValue always fires AFTER CKEditor's debounced onChange has
+   * settled. This ensures our clean value is the LAST write before Save —
+   * regardless of whether the dirty content came from a paste or was already
+   * stored in the record.
+   */
+  function handleValue(value) {
+    // Ignore echoes of values we already applied.
+    if (value === lastSanitized) return;
 
-  plugin.addFieldChangeListener(plugin.fieldPath, (newValue) => {
-    // Echo from our own setFieldValue — ignore.
-    if (newValue === lastSanitized) return;
+    const sanitized = sanitize(value);
 
-    console.log('[sanitize-richtext] field changed, checking for dirty content');
-    const sanitized = sanitize(newValue);
-
-    if (sanitized !== newValue) {
-      // Show feedback immediately so the editor knows cleanup is pending.
-      console.warn('[sanitize-richtext] dirty content detected, will sanitize after CKEditor settles');
-      console.group('[sanitize-richtext] CHANGE — value diff');
-      console.log('INPUT :', newValue);
+    if (sanitized !== value) {
+      console.warn('[sanitize-richtext] dirty content detected');
+      console.group('[sanitize-richtext] value diff');
+      console.log('INPUT :', value);
       console.log('OUTPUT:', sanitized);
-      for (let i = 0; i < Math.max(newValue.length, sanitized.length); i += 1) {
-        if (newValue[i] !== sanitized[i]) {
+      for (let i = 0; i < Math.max(value.length, sanitized.length); i += 1) {
+        if (value[i] !== sanitized[i]) {
           console.log('First diff at index', i,
-            '| input char:', JSON.stringify(newValue.substring(i, i + 40)),
-            '| output char:', JSON.stringify(sanitized.substring(i, i + 40)));
+            '| input:', JSON.stringify(value.substring(i, i + 40)),
+            '| output:', JSON.stringify(sanitized.substring(i, i + 40)));
           break;
         }
       }
       console.groupEnd();
-      showBar('⏳', 'Čistenie formátovania z Wordu/Outlooku...', '#fff3cd', '#856404', null);
 
-      // Debounce: reset the timer on every incoming dirty event.
-      // setFieldValue fires only after CKEditor has been quiet for 800 ms,
-      // ensuring our clean value is the LAST write to the store before Save.
+      showBar('⏳', 'Čistenie formátovania... pred uložením počkajte na ✓', '#fff3cd', '#856404', null);
+
+      // Debounce: reset on every incoming event. setFieldValue fires only
+      // once CKEditor has been quiet for 800 ms, so our write wins.
       if (sanitizeTimer) clearTimeout(sanitizeTimer);
       sanitizeTimer = setTimeout(() => {
         sanitizeTimer = null;
-        console.log('[sanitize-richtext] CKEditor settled, applying sanitized value');
         applySanitized(sanitized);
-        showBar('✓', 'Formátovanie bolo vyčistené — uložte záznam.', '#e6f4ea', '#1e7e34', null);
+        showBar('✓', 'Formátovanie vyčistené — teraz môžete uložiť.', '#e6f4ea', '#1e7e34', null);
       }, 800);
     } else {
       if (sanitizeTimer) clearTimeout(sanitizeTimer);
       console.log('[sanitize-richtext] content is clean ✓');
-      lastSanitized = newValue;
+      lastSanitized = value;
       bar.style.display = 'none';
     }
-  });
+  }
+
+  // Process the initial value through the same debounce as changes.
+  // This avoids the 2-save problem caused by an immediate setFieldValue on
+  // load being overwritten by CKEditor's own initialisation onChange echo.
+  const initial = plugin.getFieldValue(plugin.fieldPath);
+  console.log('[sanitize-richtext] init', { fieldPath: plugin.fieldPath });
+  handleValue(initial);
+
+  plugin.addFieldChangeListener(plugin.fieldPath, handleValue);
 });
