@@ -150,6 +150,7 @@ async function beforeSave(payload, ctx) {
     payloadAttributeKeys: Object.keys(payloadAttrs),
     hasSetFieldValue: typeof ctx.setFieldValue === 'function',
     hasSaveCurrentItem: typeof ctx.saveCurrentItem === 'function',
+    hasNotice: typeof ctx.notice === 'function',
     hasAlert: typeof ctx.alert === 'function',
     hasFormValues: !!ctx.formValues,
   });
@@ -226,10 +227,14 @@ async function beforeSave(payload, ctx) {
     return false; // block the original dirty save (clean version was just saved)
   }
 
-  // Fallback: block save and inform user
-  console.warn('[sanitize-richtext] setFieldValue/saveCurrentItem not available, using alert fallback');
-  if (typeof ctx.alert === 'function') {
-    await ctx.alert('Obsah bol automaticky vyčistený. Uložte znova.');
+  // setFieldValue/saveCurrentItem not available — block this save via return false.
+  // The render addon is already calling setFieldValue(CLEAN) asynchronously;
+  // by the time the user clicks Save again the content will be clean.
+  // Use ctx.notice() (non-blocking toast) so the hook returns immediately
+  // and DatoCMS doesn't show the "operation taking longer" timeout warning.
+  console.warn('[sanitize-richtext] setFieldValue/saveCurrentItem not available, blocking with notice');
+  if (typeof ctx.notice === 'function') {
+    ctx.notice('Formátovanie bolo vyčistené. Uložte znova.'); // non-blocking toast
   }
   return false;
 }
