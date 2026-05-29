@@ -142,87 +142,95 @@ function renderExtension(id, ctx) {
 let savingClean = false;
 
 async function beforeSave(payload, ctx) {
+  // Log the full payload and available ctx methods so we can diagnose
+  const payloadAttrs = payload?.data?.attributes ?? {};
   console.log('[sanitize-richtext] onBeforeItemUpsert fired', {
     savingClean,
-    payloadDataType: payload && payload.data && payload.data.type,
-    payloadAttributeKeys: payload && payload.data && payload.data.attributes
-      ? Object.keys(payload.data.attributes)
-      : [],
-    formValueKeys: ctx.formValues ? Object.keys(ctx.formValues) : [],
+    payloadDataType: payload?.data?.type,
+    payloadAttributeKeys: Object.keys(payloadAttrs),
     hasSetFieldValue: typeof ctx.setFieldValue === 'function',
     hasSaveCurrentItem: typeof ctx.saveCurrentItem === 'function',
+    hasAlert: typeof ctx.alert === 'function',
+    hasFormValues: !!ctx.formValues,
   });
+  // Log full payload for structure inspection (truncate large strings)
+  console.log('[sanitize-richtext] payload attributes:', JSON.stringify(payloadAttrs, (k, v) => (typeof v === 'string' && v.length > 200 ? `${v.substring(0, 200)}…` : v), 2));
 
   if (savingClean) {
     console.log('[sanitize-richtext] savingClean=true, allowing save through');
     return true;
   }
 
-  // DatoCMS may only put CHANGED fields in payload.data.attributes.
-  // We check ctx.formValues (all current field values) to catch everything.
-  const valuesToCheck = ctx.formValues || {};
+  // IMPORTANT: check the PAYLOAD (what DatoCMS will actually send to the API),
+  // not ctx.formValues. formValues may already be CLEAN because the render
+  // addon called setFieldValue() — but DatoCMS saves using the payload that
+  // was built when Save was clicked (from CKEditor's blur onChange = DIRTY).
+  //
+  // Recurse into nested objects AND arrays so we catch text inside blocks.
   const dirty = [];
 
-  function checkValue(path, value) {
+  function checkPayloadValue(path, value) {
     if (typeof value === 'string') {
       const clean = sanitize(value);
       if (clean !== value) {
         dirty.push({ path, clean });
-        console.warn('[sanitize-richtext] dirty field:', path, {
+        console.warn('[sanitize-richtext] DIRTY field in payload:', path, {
           inputLen: value.length,
           outputLen: clean.length,
           firstDiff: (() => {
             for (let i = 0; i < Math.max(value.length, clean.length); i += 1) {
               if (value[i] !== clean[i]) {
-                return `index ${i}: input="${value.substring(i, i + 30)}" → output="${clean.substring(i, i + 30)}"`;
+                return `i=${i} in="${value.substring(i, i + 40)}" out="${clean.substring(i, i + 40)}"`;
               }
             }
-            return 'no diff found';
+            return 'no diff';
           })(),
         });
       }
-    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-      // localized field: { en: '...', cs: '...' }
-      for (const [locale, localeValue] of Object.entries(value)) {
-        if (typeof localeValue === 'string') {
-          checkValue(`${path}.${locale}`, localeValue);
-        }
+    } else if (Array.isArray(value)) {
+      value.forEach((item, idx) => checkPayloadValue(`${path}.${idx}`, item));
+    } else if (value && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value)) {
+        checkPayloadValue(`${path}.${k}`, v);
       }
     }
   }
 
-  for (const [key, value] of Object.entries(valuesToCheck)) {
-    checkValue(key, value);
+  for (const [key, value] of Object.entries(payloadAttrs)) {
+    checkPayloadValue(key, value);
   }
 
   if (dirty.length === 0) {
-    console.log('[sanitize-richtext] all fields clean, allowing save');
+    console.log('[sanitize-richtext] payload is clean, allowing save');
     return true;
   }
 
-  console.warn('[sanitize-richtext] blocking save to apply sanitization on:', dirty.map((d) => d.key));
+  console.warn('[sanitize-richtext] BLOCKING save — dirty fields in payload:', dirty.map((d) => d.path));
 
-  if (typeof ctx.setFieldValue !== 'function' || typeof ctx.saveCurrentItem !== 'function') {
-    console.warn('[sanitize-richtext] setFieldValue/saveCurrentItem not available on ctx, using alert fallback');
-    await ctx.alert('Obsah obsahuje formátovanie z Wordu / Outlooku, ktoré sa práve automaticky vyčistilo. Uložte znova.');
-    return false;
+  // Best case: setFieldValue + saveCurrentItem available → auto-clean and re-save
+  if (typeof ctx.setFieldValue === 'function' && typeof ctx.saveCurrentItem === 'function') {
+    console.log('[sanitize-richtext] setFieldValue + saveCurrentItem available, applying...');
+    for (const { path, clean } of dirty) {
+      console.log('[sanitize-richtext] setFieldValue', path);
+      // eslint-disable-next-line no-await-in-loop
+      await ctx.setFieldValue(path, clean);
+    }
+    savingClean = true;
+    try {
+      console.log('[sanitize-richtext] saveCurrentItem...');
+      await ctx.saveCurrentItem(true);
+      console.log('[sanitize-richtext] saveCurrentItem ✓');
+    } finally {
+      savingClean = false;
+    }
+    return false; // block the original dirty save (clean version was just saved)
   }
 
-  for (const { key, clean } of dirty) {
-    console.log('[sanitize-richtext] setFieldValue', key);
-    // eslint-disable-next-line no-await-in-loop
-    await ctx.setFieldValue(key, clean);
+  // Fallback: block save and inform user
+  console.warn('[sanitize-richtext] setFieldValue/saveCurrentItem not available, using alert fallback');
+  if (typeof ctx.alert === 'function') {
+    await ctx.alert('Obsah bol automaticky vyčistený. Uložte znova.');
   }
-
-  savingClean = true;
-  try {
-    console.log('[sanitize-richtext] calling saveCurrentItem...');
-    await ctx.saveCurrentItem(true);
-    console.log('[sanitize-richtext] saveCurrentItem done ✓');
-  } finally {
-    savingClean = false;
-  }
-
   return false;
 }
 
