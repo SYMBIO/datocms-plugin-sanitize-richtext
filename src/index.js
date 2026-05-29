@@ -234,23 +234,20 @@ console.log('[sanitize-richtext] window.DatoCmsPlugin (old SDK):', typeof window
 
 connect({
   overrideFieldExtensions(field, ctx) {
-    // Only apply to multiple-paragraph text fields (HTML/WYSIWYG).
-    // Exclude: string (single-line), structured_text, and any field
-    // that lives inside a block model (modular_block = true).
+    // Apply to all multiple-paragraph text fields (HTML/WYSIWYG),
+    // including text fields inside block models.
+    // Only exclude: string (single-line), structured_text, rich_text, etc.
     if (field.attributes.field_type !== 'text') return undefined;
 
     const itemTypeId = field.relationships.item_type.data.id;
     const itemType = ctx.itemTypes[itemTypeId];
-    const isBlock = itemType && itemType.attributes.modular_block;
 
     console.log('[sanitize-richtext] overrideFieldExtensions', {
       apiKey: field.attributes.api_key,
       type: field.attributes.field_type,
-      itemTypeId,
-      isBlock,
+      itemTypeApiKey: itemType && itemType.attributes.api_key,
+      isBlock: itemType && itemType.attributes.modular_block,
     });
-
-    if (isBlock) return undefined; // skip fields inside block models
 
     return { addons: [{ id: 'sanitize-richtext' }] };
   },
