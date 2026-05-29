@@ -367,6 +367,18 @@ async function beforeSave(payload, ctx) {
 console.log('[sanitize-richtext] loading plugin, calling connect()...');
 
 connect({
+  // Registering onBoot forces DatoCMS to create a background iframe.
+  // Without it, render iframes get a limited ctx (no saveCurrentItem).
+  // With it, DatoCMS uses callMethodMergingBootCtx which merges the full
+  // boot ctx into every render iframe → saveCurrentItem becomes available.
+  onBoot(ctx) {
+    console.log('[sanitize-richtext] onBoot', {
+      hasSaveCurrentItem: typeof ctx.saveCurrentItem === 'function',
+      hasSetFieldValue: typeof ctx.setFieldValue === 'function',
+      hasNotice: typeof ctx.notice === 'function',
+    });
+  },
+
   overrideFieldExtensions(field, ctx) {
     if (field.attributes.field_type !== 'text') return undefined;
 
