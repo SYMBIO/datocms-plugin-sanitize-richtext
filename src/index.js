@@ -35,20 +35,13 @@ window.DatoCmsPlugin.init((plugin) => {
   plugin.startAutoResizer();
 
   let lastSanitized = null;
-  let retryTimer = null;
 
-  /**
-   * Write the sanitized value to the field and schedule one re-check after
-   * 600 ms. CKEditor can fire its own debounced onChange *after* we call
-   * setFieldValue and overwrite our clean value with the original dirty
-   * content. The re-check catches that overwrite and corrects it.
-   *
-   * NOTE: Because field_addon plugins run in a separate iframe, setFieldValue
-   * updates the DatoCMS store (= what gets saved) but does NOT force CKEditor
-   * to re-render its visual display. The editor will visually show clean
-   * content only after the page is refreshed. The status bar below lets
-   * editors know the cleanup already happened.
-   */
+  // Tracks the raw dirty value we already processed. CKEditor often fires its
+  // debounced onChange again with the pre-sanitized content after we call
+  // setFieldValue — this guard makes sure we process each unique dirty string
+  // only once, breaking the save → dirty → save infinite loop.
+  let lastDirtySeen = null;
+
   function applySanitized(sanitized) {
     console.log('[sanitize-richtext] applying sanitized value', { fieldPath: plugin.fieldPath, sanitized });
     lastSanitized = sanitized;
@@ -60,23 +53,6 @@ window.DatoCmsPlugin.init((plugin) => {
       '#1e7e34',
       6000,
     );
-
-    if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = setTimeout(() => {
-      retryTimer = null;
-      const current = plugin.getFieldValue(plugin.fieldPath);
-      if (current === lastSanitized) {
-        console.log('[sanitize-richtext] retry check: value is stable ✓');
-        return;
-      }
-      console.warn('[sanitize-richtext] retry check: CKEditor overwrote the sanitized value, re-applying');
-      const reSanitized = sanitize(current);
-      if (reSanitized !== current) {
-        applySanitized(reSanitized);
-      } else {
-        lastSanitized = current;
-      }
-    }, 600);
   }
 
   // Sanitize existing value on load (marks the form dirty — editor must save).
@@ -84,6 +60,7 @@ window.DatoCmsPlugin.init((plugin) => {
   const initialSanitized = sanitize(initial);
   if (initialSanitized !== initial) {
     console.warn('[sanitize-richtext] dirty content detected on load, sanitizing', { fieldPath: plugin.fieldPath });
+    lastDirtySeen = initial;
     applySanitized(initialSanitized);
   } else {
     console.log('[sanitize-richtext] content is clean on load ✓', { fieldPath: plugin.fieldPath });
@@ -91,17 +68,29 @@ window.DatoCmsPlugin.init((plugin) => {
   }
 
   plugin.addFieldChangeListener(plugin.fieldPath, (newValue) => {
-    // Ignore our own setFieldValue echoes.
+    // Echo from our own setFieldValue — ignore.
     if (newValue === lastSanitized) return;
+
+    // CKEditor re-firing the exact dirty string we already sanitized.
+    // Without this guard setFieldValue → CKEditor echo → setFieldValue → ∞.
+    if (newValue === lastDirtySeen) {
+      console.log('[sanitize-richtext] ignoring CKEditor echo of already-sanitized dirty content');
+      return;
+    }
 
     console.log('[sanitize-richtext] field changed, checking for dirty content');
     const sanitized = sanitize(newValue);
+
     if (sanitized !== newValue) {
       console.warn('[sanitize-richtext] dirty content detected, sanitizing');
+      lastDirtySeen = newValue;
       applySanitized(sanitized);
     } else {
       console.log('[sanitize-richtext] content is clean ✓');
       lastSanitized = newValue;
+      // Reset so the same dirty content can be caught again if user types
+      // clean text in between and then pastes the same dirty content again.
+      lastDirtySeen = null;
       bar.style.display = 'none';
     }
   });
