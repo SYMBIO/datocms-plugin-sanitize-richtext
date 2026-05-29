@@ -38,7 +38,7 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      title: 'DatoCMS Plugin',
+      template: path.join(__dirname, 'src/index.html'),
       minify: isProduction,
     }),
   ],
