@@ -50,6 +50,7 @@ window.DatoCmsPlugin.init((plugin) => {
    * editors know the cleanup already happened.
    */
   function applySanitized(sanitized) {
+    console.log('[sanitize-richtext] applying sanitized value', { fieldPath: plugin.fieldPath, sanitized });
     lastSanitized = sanitized;
     plugin.setFieldValue(plugin.fieldPath, sanitized);
     showBar(
@@ -64,8 +65,11 @@ window.DatoCmsPlugin.init((plugin) => {
     retryTimer = setTimeout(() => {
       retryTimer = null;
       const current = plugin.getFieldValue(plugin.fieldPath);
-      if (current === lastSanitized) return;
-
+      if (current === lastSanitized) {
+        console.log('[sanitize-richtext] retry check: value is stable ✓');
+        return;
+      }
+      console.warn('[sanitize-richtext] retry check: CKEditor overwrote the sanitized value, re-applying');
       const reSanitized = sanitize(current);
       if (reSanitized !== current) {
         applySanitized(reSanitized);
@@ -79,8 +83,10 @@ window.DatoCmsPlugin.init((plugin) => {
   const initial = plugin.getFieldValue(plugin.fieldPath);
   const initialSanitized = sanitize(initial);
   if (initialSanitized !== initial) {
+    console.warn('[sanitize-richtext] dirty content detected on load, sanitizing', { fieldPath: plugin.fieldPath });
     applySanitized(initialSanitized);
   } else {
+    console.log('[sanitize-richtext] content is clean on load ✓', { fieldPath: plugin.fieldPath });
     lastSanitized = initial;
   }
 
@@ -88,10 +94,13 @@ window.DatoCmsPlugin.init((plugin) => {
     // Ignore our own setFieldValue echoes.
     if (newValue === lastSanitized) return;
 
+    console.log('[sanitize-richtext] field changed, checking for dirty content');
     const sanitized = sanitize(newValue);
     if (sanitized !== newValue) {
+      console.warn('[sanitize-richtext] dirty content detected, sanitizing');
       applySanitized(sanitized);
     } else {
+      console.log('[sanitize-richtext] content is clean ✓');
       lastSanitized = newValue;
       bar.style.display = 'none';
     }
