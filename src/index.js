@@ -24,9 +24,7 @@ function showBar(icon, msg, bg, color, autohide) {
   bar.style.background = bg;
   bar.style.color = color;
   bar.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
-  if (autohide) {
-    hideTimer = setTimeout(() => { bar.style.display = 'none'; }, autohide);
-  }
+  if (autohide) hideTimer = setTimeout(() => { bar.style.display = 'none'; }, autohide);
 }
 
 /* ─── Plugin logic ───────────────────────────────────────────────────────── */
@@ -36,32 +34,25 @@ window.DatoCmsPlugin.init((plugin) => {
 
   let lastSanitized = null;
 
-  // Tracks the raw dirty value we already processed. CKEditor often fires its
-  // debounced onChange again with the pre-sanitized content after we call
-  // setFieldValue — this guard makes sure we process each unique dirty string
-  // only once, breaking the save → dirty → save infinite loop.
-  let lastDirtySeen = null;
+  // Debounce timer for setFieldValue. We wait for CKEditor to finish all its
+  // debounced onChange events and then write the clean value LAST, so our
+  // write wins over CKEditor's dirty echo when the user clicks Save.
+  let sanitizeTimer = null;
 
   function applySanitized(sanitized) {
     console.log('[sanitize-richtext] applying sanitized value', { fieldPath: plugin.fieldPath, sanitized });
     lastSanitized = sanitized;
     plugin.setFieldValue(plugin.fieldPath, sanitized);
-    showBar(
-      '✓',
-      'Formátovanie z Wordu/Outlooku bolo odstránené. Obsah bude uložený v čistej podobe.',
-      '#e6f4ea',
-      '#1e7e34',
-      6000,
-    );
   }
 
-  // Sanitize existing value on load (marks the form dirty — editor must save).
+  // On load CKEditor is not yet in "active edit" mode, so setFieldValue is
+  // accepted immediately — no debounce needed here.
   const initial = plugin.getFieldValue(plugin.fieldPath);
   const initialSanitized = sanitize(initial);
   if (initialSanitized !== initial) {
-    console.warn('[sanitize-richtext] dirty content detected on load, sanitizing', { fieldPath: plugin.fieldPath });
-    lastDirtySeen = initial;
+    console.warn('[sanitize-richtext] dirty content on load, sanitizing immediately', { fieldPath: plugin.fieldPath });
     applySanitized(initialSanitized);
+    showBar('✓', 'Formátovanie bolo vyčistené — uložte záznam.', '#e6f4ea', '#1e7e34', null);
   } else {
     console.log('[sanitize-richtext] content is clean on load ✓', { fieldPath: plugin.fieldPath });
     lastSanitized = initial;
@@ -71,26 +62,28 @@ window.DatoCmsPlugin.init((plugin) => {
     // Echo from our own setFieldValue — ignore.
     if (newValue === lastSanitized) return;
 
-    // CKEditor re-firing the exact dirty string we already sanitized.
-    // Without this guard setFieldValue → CKEditor echo → setFieldValue → ∞.
-    if (newValue === lastDirtySeen) {
-      console.log('[sanitize-richtext] ignoring CKEditor echo of already-sanitized dirty content');
-      return;
-    }
-
     console.log('[sanitize-richtext] field changed, checking for dirty content');
     const sanitized = sanitize(newValue);
 
     if (sanitized !== newValue) {
-      console.warn('[sanitize-richtext] dirty content detected, sanitizing');
-      lastDirtySeen = newValue;
-      applySanitized(sanitized);
+      // Show feedback immediately so the editor knows cleanup is pending.
+      console.warn('[sanitize-richtext] dirty content detected, will sanitize after CKEditor settles');
+      showBar('⏳', 'Čistenie formátovania z Wordu/Outlooku...', '#fff3cd', '#856404', null);
+
+      // Debounce: reset the timer on every incoming dirty event.
+      // setFieldValue fires only after CKEditor has been quiet for 800 ms,
+      // ensuring our clean value is the LAST write to the store before Save.
+      if (sanitizeTimer) clearTimeout(sanitizeTimer);
+      sanitizeTimer = setTimeout(() => {
+        sanitizeTimer = null;
+        console.log('[sanitize-richtext] CKEditor settled, applying sanitized value');
+        applySanitized(sanitized);
+        showBar('✓', 'Formátovanie bolo vyčistené — uložte záznam.', '#e6f4ea', '#1e7e34', null);
+      }, 800);
     } else {
+      if (sanitizeTimer) clearTimeout(sanitizeTimer);
       console.log('[sanitize-richtext] content is clean ✓');
       lastSanitized = newValue;
-      // Reset so the same dirty content can be caught again if user types
-      // clean text in between and then pastes the same dirty content again.
-      lastDirtySeen = null;
       bar.style.display = 'none';
     }
   });
