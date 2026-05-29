@@ -8,8 +8,8 @@
     "start": "concurrently \"yarn dev\" \"yarn localtunnel\"",
     "localtunnel": "lt -s datocms-plugin-datocms-plugin-sanitize-richtext --port 5000",
     "dev": "NODE_ENV=development webpack-dev-server --port 5000",
-    "dist": "NODE_ENV=production webpack --progress",
-    "build": "NODE_ENV=production webpack --progress",
+    "dist": "NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production webpack --progress",
+    "build": "NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production webpack --progress",
     "prepublishOnly": "rimraf lib public && mkdir public && npm run dist",
     "addToProject": "yo datocms-plugin:add-to-project",
     "test": "node test/sanitize.test.js"
@@ -26,6 +26,9 @@
   ],
   "author": "SYMBIO <dev@symbio.agency>",
   "license": "ISC",
+  "engines": {
+    "node": ">=16"
+  },
   "datoCmsPlugin": {
     "title": "Sanitize Richtext",
     "previewImage": "docs/preview.gif",
@@ -66,6 +69,6 @@
     "yo": "^3.1.1"
   },
   "dependencies": {
-    "sanitize-html": "^2.17.4"
+    "sanitize-html": "2.0.0"
   }
 }
