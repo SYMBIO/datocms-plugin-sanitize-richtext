@@ -177,11 +177,26 @@ function SanitizeAddon({ ctx }) {
     }
 
     const clean = sanitize(fieldValue);
-    console.log('[sanitize-richtext] sanitize result', {
-      inputLength: fieldValue.length,
-      outputLength: clean.length,
-      changed: clean !== fieldValue,
-    });
+
+    // Detailed diff log so we can diagnose idempotency issues after save/reload.
+    if (clean !== fieldValue) {
+      let firstDiff = 'no diff';
+      for (let i = 0; i < Math.max(fieldValue.length, clean.length); i += 1) {
+        if (fieldValue[i] !== clean[i]) {
+          firstDiff = `index ${i} | input: "${fieldValue.substring(i, i + 80)}" | output: "${clean.substring(i, i + 80)}"`;
+          break;
+        }
+      }
+      console.warn('[sanitize-richtext] SANITIZE DIFF', {
+        inputLength: fieldValue.length,
+        outputLength: clean.length,
+        firstDiff,
+        fullInput: fieldValue,
+        fullOutput: clean,
+      });
+    } else {
+      console.log('[sanitize-richtext] sanitize — no change', { length: fieldValue.length });
+    }
 
     if (clean !== fieldValue) {
       console.warn('[sanitize-richtext] DIRTY — calling setFieldValue');
