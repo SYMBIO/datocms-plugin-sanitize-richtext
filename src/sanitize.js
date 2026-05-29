@@ -37,7 +37,7 @@ function sanitize(text) {
 
   const preCleaned = stripMsOfficeArtifacts(text);
 
-  return sanitizeHtml(preCleaned, {
+  const result = sanitizeHtml(preCleaned, {
     allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol', 'li',
       'b', 'i', 'strong', 'em', 'strike', 'br', 'table', 'thead', 'caption', 'tbody', 'tfoot',
       'tr', 'th', 'td', 'iframe', 'img', 'button'],
@@ -56,6 +56,12 @@ function sanitize(text) {
       div: 'p',
     },
   });
+
+  // sanitize-html outputs void elements as XHTML self-closing (<br />, <img ... />).
+  // CKEditor normalises these to HTML5 form (<br>, <img ...>) on every render.
+  // Without this fix the stored value and the sanitized value would differ on
+  // every page load, causing an infinite dirty-form / re-save loop.
+  return result.replace(/<(br|img)([^>]*?)\s*\/>/gi, '<$1$2>');
 }
 
 module.exports = { sanitize, stripMsOfficeArtifacts };

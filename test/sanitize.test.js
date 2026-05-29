@@ -54,6 +54,20 @@ test('keeps allowed inline tags (b, i, strong, em, a)', () => {
   assert.ok(/<a href="https:\/\/example\.com" title="t" target="_blank" rel="noopener">link<\/a>/.test(out));
 });
 
+test('<br /> is normalised to <br> to match CKEditor output (prevents infinite dirty loop)', () => {
+  assert.strictEqual(sanitize('<p>line1<br>line2</p>'), '<p>line1<br>line2</p>');
+  assert.strictEqual(sanitize('<p>line1<br />line2</p>'), '<p>line1<br>line2</p>');
+  assert.strictEqual(sanitize('<p>line1<BR/>line2</p>'), '<p>line1<br>line2</p>');
+});
+
+test('real-world: br normalisation is idempotent with CKEditor round-trip', () => {
+  // Simulate: plugin sanitizes → CKEditor stores <br> → plugin sanitizes again
+  const afterPlugin = sanitize('<p>A<br>B</p>');      // CKEditor input
+  const afterCKEditor = afterPlugin;                   // CKEditor keeps <br> unchanged
+  const afterPlugin2 = sanitize(afterCKEditor);
+  assert.strictEqual(afterPlugin, afterPlugin2, 'must be stable across CKEditor round-trips');
+});
+
 test('converts <div> to <p>', () => {
   assert.strictEqual(sanitize('<div>x</div>'), '<p>x</p>');
 });
