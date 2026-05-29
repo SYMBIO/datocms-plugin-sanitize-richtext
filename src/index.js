@@ -214,7 +214,7 @@ async function beforeSave(payload, ctx) {
   bcPost({ type: 'save-blocked' });
 
   if (typeof ctx.notice === 'function') {
-    ctx.notice('Formátovanie sa čistí, uloží sa automaticky...');
+    ctx.notice('Formátování se čistí, uloží se automaticky...');
   }
 
   return false;
