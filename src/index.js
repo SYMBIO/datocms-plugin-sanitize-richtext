@@ -214,6 +214,27 @@ function SanitizeAddon({ ctx }) {
           setStatus(null);
         });
     } else {
+      // Both old and new values are clean — but they differ.
+      // This is CKEditor normalizing the HTML after setFieldValue / page load.
+      // Log the diff so we can apply the same normalization in the sanitizer.
+      if (lastCleanRef.current !== null && lastCleanRef.current !== fieldValue) {
+        let ckDiff = 'no diff found';
+        const prev = lastCleanRef.current;
+        const next = fieldValue;
+        for (let i = 0; i < Math.max(prev.length, next.length); i += 1) {
+          if (prev[i] !== next[i]) {
+            ckDiff = `index ${i} | prev(${prev.length}): "${prev.substring(i, i + 100)}" | next(${next.length}): "${next.substring(i, i + 100)}"`;
+            break;
+          }
+        }
+        console.warn('[sanitize-richtext] CKEDITOR NORMALIZATION (both clean, value changed)', {
+          prevLength: prev.length,
+          newLength: next.length,
+          diff: ckDiff,
+          prevTail: prev.substring(prev.length - 150),
+          newTail: next.substring(next.length - 150),
+        });
+      }
       lastCleanRef.current = fieldValue;
       setStatus(null);
       scheduleAutoSave();
