@@ -1,6 +1,6 @@
 import { connect } from 'datocms-plugin-sdk';
 import { createRoot } from 'react-dom/client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { sanitize } from './sanitize';
 
 /* ─── Cross-iframe coordination keys ────────────────────────────────────── */
@@ -12,35 +12,6 @@ const BC_NAME = 'sanitize-richtext-v1';
 // sessionStorage keys (shared by all same-origin iframes in this tab).
 const SK_AUTOSAVE = 'srt-autosave-needed'; // set by beforeSave to request auto-save
 const SK_CLEAN    = 'srt-clean-save';      // set by render addon before saveCurrentItem
-
-/* ─── Status bar component ───────────────────────────────────────────────── */
-
-const BAR_STYLES = {
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  fontSize: '12px',
-  padding: '8px 12px',
-  borderRadius: '4px',
-  margin: '4px 0',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  border: '1px solid transparent',
-};
-
-const THEMES = {
-  sanitizing: { background: '#fff3cd', borderColor: '#ffc107', color: '#856404' },
-  done: { background: '#e6f4ea', borderColor: '#a8d5b5', color: '#1e7e34' },
-  saving: { background: '#cfe2ff', borderColor: '#9ec5fe', color: '#084298' },
-};
-
-function StatusBar({ theme, icon, msg }) {
-  return (
-    <div style={{ ...BAR_STYLES, ...THEMES[theme] }}>
-      <span>{icon}</span>
-      <span>{msg}</span>
-    </div>
-  );
-}
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -76,7 +47,6 @@ function bcPost(msg) {
 /* ─── Field addon React component ────────────────────────────────────────── */
 
 function SanitizeAddon({ ctx }) {
-  const [status, setStatus] = useState(null);
   const lastCleanRef = useRef(null);
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
@@ -101,13 +71,8 @@ function SanitizeAddon({ ctx }) {
       ssRemove(SK_AUTOSAVE);
       autoSaveRef.current = false;
 
-      setStatus('saving');
       ssSet(SK_CLEAN, '1');
-      ctxRef.current.saveCurrentItem().then(() => {
-        setStatus(null);
-      }).catch(() => {
-        setStatus(null);
-      }).finally(() => {
+      ctxRef.current.saveCurrentItem().catch(() => {}).finally(() => {
         ssRemove(SK_CLEAN);
       });
     }, 400); // 400 ms lets other render iframes finish their setFieldValue calls
@@ -155,34 +120,17 @@ function SanitizeAddon({ ctx }) {
     const clean = sanitize(fieldValue);
 
     if (clean !== fieldValue) {
-      setStatus('sanitizing');
       lastCleanRef.current = clean;
       ctxRef.current.setFieldValue(ctxRef.current.fieldPath, clean)
-        .then(() => {
-          setStatus('done');
-          setTimeout(() => setStatus(null), 5000);
-          scheduleAutoSave();
-        })
-        .catch(() => {
-          setStatus(null);
-        });
+        .then(() => { scheduleAutoSave(); })
+        .catch(() => {});
     } else {
       lastCleanRef.current = fieldValue;
-      setStatus(null);
       scheduleAutoSave();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldValue]);
 
-  if (status === 'sanitizing') {
-    return <StatusBar theme="sanitizing" icon="⏳" msg="Čistenie formátovania..." />;
-  }
-  if (status === 'saving') {
-    return <StatusBar theme="saving" icon="💾" msg="Ukladám vyčistený obsah..." />;
-  }
-  if (status === 'done') {
-    return <StatusBar theme="done" icon="✓" msg="Formátovanie vyčistené." />;
-  }
   return null;
 }
 
