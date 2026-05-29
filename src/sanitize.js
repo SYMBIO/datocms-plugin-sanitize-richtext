@@ -59,9 +59,14 @@ function sanitize(text) {
 
   // sanitize-html outputs void elements as XHTML self-closing (<br />, <img ... />).
   // CKEditor normalises these to HTML5 form (<br>, <img ...>) on every render.
-  // Without this fix the stored value and the sanitized value would differ on
-  // every page load, causing an infinite dirty-form / re-save loop.
-  return result.replace(/<(br|img)([^>]*?)\s*\/>/gi, '<$1$2>');
+  return result
+    .replace(/<(br|img)([^>]*?)\s*\/>/gi, '<$1$2>')
+    // CKEditor strips \r from HTML (Windows line endings \r\n → \n).
+    // Stripping here prevents a 1-char difference per \r on every page load.
+    .replace(/\r/g, '')
+    // CKEditor trims trailing plain spaces that appear just before a closing tag.
+    // e.g. "text  </p>" → "text</p>" — strip to match what CKEditor stores.
+    .replace(/ +(<\/(?:p|h[1-6]|li|td|th|blockquote)>)/gi, '$1');
 }
 
 module.exports = { sanitize, stripMsOfficeArtifacts };
