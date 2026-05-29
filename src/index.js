@@ -1,163 +1,156 @@
-const { sanitize } = require('./sanitize');
+import { connect } from 'datocms-plugin-sdk';
+import { createRoot } from 'react-dom/client';
+import { useEffect, useRef, useState } from 'react';
+import { sanitize } from './sanitize';
 
-/* ─── Status bar UI ──────────────────────────────────────────────────────── */
+/* ─── Status bar component ───────────────────────────────────────────────── */
 
-const style = document.createElement('style');
-style.textContent = `
-  #sr-bar {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 12px;
-    padding: 8px 12px;
-    border-radius: 4px;
-    margin: 4px 0;
-    display: none;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid transparent;
-    transition: opacity 0.2s;
-  }
-  #sr-bar.clickable {
-    cursor: pointer;
-    user-select: none;
-  }
-  #sr-bar.clickable:hover {
-    filter: brightness(0.95);
-  }
-  #sr-bar .sr-btn {
-    margin-left: auto;
-    padding: 2px 8px;
-    border-radius: 3px;
-    border: 1px solid currentColor;
-    background: transparent;
-    font-size: 11px;
-    cursor: pointer;
-    white-space: nowrap;
-    color: inherit;
-  }
-`;
-document.head.appendChild(style);
+const BAR_STYLES = {
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontSize: '12px',
+  padding: '8px 12px',
+  borderRadius: '4px',
+  margin: '4px 0',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  border: '1px solid transparent',
+};
 
-const bar = document.createElement('div');
-bar.id = 'sr-bar';
-document.body.style.margin = '0';
-document.body.appendChild(bar);
+const THEMES = {
+  sanitizing: { background: '#fff3cd', borderColor: '#ffc107', color: '#856404' },
+  done: { background: '#e6f4ea', borderColor: '#a8d5b5', color: '#1e7e34' },
+};
 
-let hideTimer = null;
-
-function showBar({
-  icon, msg, bg, borderColor, color, button, autohide,
-}) {
-  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-  bar.style.display = 'flex';
-  bar.style.background = bg;
-  bar.style.borderColor = borderColor || bg;
-  bar.style.color = color;
-  bar.className = button ? 'clickable' : '';
-  const btnHtml = button ? `<button class="sr-btn" type="button">${button}</button>` : '';
-  bar.innerHTML = `<span>${icon}</span><span>${msg}</span>${btnHtml}`;
-  if (autohide) hideTimer = setTimeout(() => { bar.style.display = 'none'; }, autohide);
+function StatusBar({ theme, icon, msg }) {
+  return (
+    <div style={{ ...BAR_STYLES, ...THEMES[theme] }}>
+      <span>{icon}</span>
+      <span>{msg}</span>
+    </div>
+  );
 }
 
-/* ─── Plugin logic ───────────────────────────────────────────────────────── */
+/* ─── Field addon React component ────────────────────────────────────────── */
 
-window.DatoCmsPlugin.init((plugin) => {
-  plugin.startAutoResizer();
+function SanitizeAddon({ ctx }) {
+  const [status, setStatus] = useState(null); // null | 'sanitizing' | 'done'
+  const lastCleanRef = useRef(null);
+  // keep a stable ref to ctx so async callbacks always see the latest version
+  const ctxRef = useRef(ctx);
+  ctxRef.current = ctx;
 
-  let lastSanitized = null;
-  let sanitizeTimer = null;
-  // clean value waiting to be applied on bar click
-  let pendingClean = null;
+  const fieldValue = ctx.formValues[ctx.fieldPath];
 
-  function applySanitized(sanitized) {
-    console.log('[sanitize-richtext] applying sanitized value', { fieldPath: plugin.fieldPath });
-    lastSanitized = sanitized;
-    pendingClean = null;
-    plugin.setFieldValue(plugin.fieldPath, sanitized);
+  useEffect(() => {
+    if (typeof fieldValue !== 'string') return;
+    if (fieldValue === lastCleanRef.current) return;
+
+    const clean = sanitize(fieldValue);
+
+    if (clean !== fieldValue) {
+      setStatus('sanitizing');
+      lastCleanRef.current = clean;
+      ctxRef.current.setFieldValue(ctxRef.current.fieldPath, clean)
+        .then(() => {
+          setStatus('done');
+          setTimeout(() => setStatus(null), 8000);
+        })
+        .catch(() => setStatus(null));
+    } else {
+      lastCleanRef.current = fieldValue;
+      setStatus(null);
+    }
+  // fieldValue is the only reactive dep — ctx is accessed via the stable ref
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldValue]);
+
+  if (status === 'sanitizing') {
+    return <StatusBar theme="sanitizing" icon="⏳" msg="Čistenie formátovania..." />;
   }
+  if (status === 'done') {
+    return <StatusBar theme="done" icon="✓" msg="Formátovanie vyčistené — teraz môžete uložiť." />;
+  }
+  return null;
+}
 
-  // When the user clicks the status bar, their browser moves focus from
-  // CKEditor to our plugin iframe. Browser event order guarantees that
-  // CKEditor's blur (and its final onChange) fires BEFORE our click handler.
-  // So by the time we call setFieldValue(CLEAN) here, we are writing AFTER
-  // CKEditor's last dirty write — and we win the race against Save.
-  bar.addEventListener('click', () => {
-    if (!pendingClean) return;
-    if (sanitizeTimer) { clearTimeout(sanitizeTimer); sanitizeTimer = null; }
-    console.log('[sanitize-richtext] bar clicked — applying clean value immediately');
-    applySanitized(pendingClean);
-    showBar({
-      icon: '✓',
-      msg: 'Formátovanie vyčistené — teraz môžete uložiť.',
-      bg: '#e6f4ea',
-      borderColor: '#a8d5b5',
-      color: '#1e7e34',
-      autohide: 8000,
-    });
-  });
+/* ─── Root management ────────────────────────────────────────────────────── */
+// The SDK calls renderFieldExtension again on every ctx change.
+// We create the React root once and re-render into it on each call.
+let reactRoot = null;
 
-  function handleValue(value) {
-    if (value === lastSanitized) return;
+function renderExtension(id, ctx) {
+  ctx.startAutoResizer();
+  if (!reactRoot) {
+    reactRoot = createRoot(document.getElementById('root'));
+  }
+  reactRoot.render(<SanitizeAddon ctx={ctx} />);
+}
 
-    const sanitized = sanitize(value);
+/* ─── Before-save sanitization ───────────────────────────────────────────── */
+// Safety net: if dirty content slips through to Save (e.g. user clicks Save
+// faster than the render addon can react), onBeforeItemUpsert intercepts it,
+// sanitizes all text fields, re-saves with clean content, and blocks the
+// original dirty save.
 
-    if (sanitized !== value) {
-      console.warn('[sanitize-richtext] dirty content detected');
-      console.group('[sanitize-richtext] value diff');
-      console.log('INPUT :', value);
-      console.log('OUTPUT:', sanitized);
-      for (let i = 0; i < Math.max(value.length, sanitized.length); i += 1) {
-        if (value[i] !== sanitized[i]) {
-          console.log('First diff at index', i,
-            '| input:', JSON.stringify(value.substring(i, i + 40)),
-            '| output:', JSON.stringify(sanitized.substring(i, i + 40)));
-          break;
+let savingClean = false; // guard against recursive onBeforeItemUpsert calls
+
+async function beforeSave(payload, ctx) {
+  if (savingClean) return true;
+
+  const attrs = (payload.data && payload.data.attributes) ? payload.data.attributes : {};
+  const dirty = [];
+
+  for (const [key, value] of Object.entries(attrs)) {
+    if (typeof value === 'string') {
+      const clean = sanitize(value);
+      if (clean !== value) dirty.push({ key, clean });
+    } else if (value && typeof value === 'object') {
+      // localized field: { en: '...', cs: '...' }
+      for (const [locale, localeValue] of Object.entries(value)) {
+        if (typeof localeValue === 'string') {
+          const clean = sanitize(localeValue);
+          if (clean !== localeValue) dirty.push({ key: `${key}.${locale}`, clean });
         }
       }
-      console.groupEnd();
-
-      pendingClean = sanitized;
-
-      // Show clickable warning bar.
-      // Clicking it blurs CKEditor first (browser guarantees this), then
-      // our click handler fires setFieldValue(CLEAN) — after CKEditor's last
-      // dirty write — so CLEAN is what DatoCMS saves.
-      showBar({
-        icon: '⚠️',
-        msg: 'Nájdené formátovanie z Wordu / Outlooku.',
-        bg: '#fff3cd',
-        borderColor: '#ffc107',
-        color: '#856404',
-        button: 'Vyčistiť a uložiť',
-      });
-
-      // Also keep the 800ms debounce as fallback for the case when the user
-      // blurs the editor by clicking somewhere other than Save.
-      if (sanitizeTimer) clearTimeout(sanitizeTimer);
-      sanitizeTimer = setTimeout(() => {
-        sanitizeTimer = null;
-        if (!pendingClean) return; // already applied via bar click
-        applySanitized(sanitized);
-        showBar({
-          icon: '✓',
-          msg: 'Formátovanie vyčistené — teraz môžete uložiť.',
-          bg: '#e6f4ea',
-          borderColor: '#a8d5b5',
-          color: '#1e7e34',
-          autohide: 8000,
-        });
-      }, 800);
-    } else {
-      if (sanitizeTimer) { clearTimeout(sanitizeTimer); sanitizeTimer = null; }
-      pendingClean = null;
-      console.log('[sanitize-richtext] content is clean ✓');
-      lastSanitized = value;
-      bar.style.display = 'none';
     }
   }
 
-  const initial = plugin.getFieldValue(plugin.fieldPath);
-  console.log('[sanitize-richtext] init', { fieldPath: plugin.fieldPath });
-  handleValue(initial);
+  if (dirty.length === 0) return true;
 
-  plugin.addFieldChangeListener(plugin.fieldPath, handleValue);
+  console.warn('[sanitize-richtext] onBeforeItemUpsert: dirty fields detected', dirty.map((d) => d.key));
+
+  if (typeof ctx.setFieldValue !== 'function' || typeof ctx.saveCurrentItem !== 'function') {
+    // Fallback: alert user and block this save — render addon will clean it
+    await ctx.alert('Obsah obsahuje formátovanie z Wordu / Outlooku, ktoré sa práve automaticky vyčistilo. Uložte znova.');
+    return false;
+  }
+
+  for (const { key, clean } of dirty) {
+    // eslint-disable-next-line no-await-in-loop
+    await ctx.setFieldValue(key, clean);
+  }
+
+  savingClean = true;
+  try {
+    await ctx.saveCurrentItem(true);
+  } finally {
+    savingClean = false;
+  }
+
+  return false; // block the original dirty save (clean version was saved above)
+}
+
+/* ─── Plugin entry point ─────────────────────────────────────────────────── */
+
+connect({
+  overrideFieldExtensions(field) {
+    if (field.attributes.field_type === 'text') {
+      return { addons: [{ id: 'sanitize-richtext' }] };
+    }
+  },
+
+  renderFieldExtension: renderExtension,
+
+  onBeforeItemUpsert: beforeSave,
 });

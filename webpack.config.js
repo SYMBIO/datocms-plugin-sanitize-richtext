@@ -1,54 +1,45 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const HtmlWebpackTagsPlugin = require('html-webpack-tags-plugin');
+const path = require('path');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
 module.exports = {
-  entry: `${__dirname}/src/index.js`,
-  mode: process.env.NODE_ENV,
+  entry: path.join(__dirname, 'src/index.js'),
+  mode: isProduction ? 'production' : 'development',
   output: {
-    path: `${__dirname}/public`,
+    path: path.join(__dirname, 'public'),
     filename: 'bundle.js',
+    clean: true,
   },
   devtool: 'source-map',
   devServer: {
-    contentBase: './',
-    disableHostCheck: true,
-    public: 'https://datocms-plugin-datocms-plugin-sanitize-richtext.localtunnel.me',
+    static: './',
+    allowedHosts: 'all',
+    port: 5000,
   },
   module: {
     rules: [
       {
-        test: /\.js$/,
-        include: `${__dirname}/src`,
-        loader: 'eslint-loader',
-        enforce: 'pre',
-      },
-      {
-        test: /\.js$/,
-        exclude: /(node_modules|bower_components)/,
+        test: /\.(js|jsx)$/,
+        exclude: /node_modules/,
         use: { loader: 'babel-loader' },
       },
       {
         test: /\.css$/,
-        use: [
-          'style-loader',
-          'css-loader',
-        ],
+        use: ['style-loader', 'css-loader'],
       },
     ],
+  },
+  resolve: {
+    extensions: ['.js', '.jsx'],
+  },
+  performance: {
+    hints: false, // bundle includes React + sanitize-html, size warnings are expected
   },
   plugins: [
     new HtmlWebpackPlugin({
       title: 'DatoCMS Plugin',
       minify: isProduction,
     }),
-    new HtmlWebpackTagsPlugin({
-      tags: [
-        'https://unpkg.com/datocms-plugins-sdk@0.1.2/dist/sdk.js',
-        'https://unpkg.com/datocms-plugins-sdk@0.1.2/dist/sdk.css',
-      ],
-      append: false,
-    }),
-  ].filter(Boolean),
+  ],
 };

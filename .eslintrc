@@ -1,18 +1,22 @@
 {
-  parser: "babel-eslint",
-  extends: "airbnb-base",
-  env: {
-    es6: true,
-    mocha: true,
-    browser: true
+  "parser": "@babel/eslint-parser",
+  "parserOptions": {
+    "requireConfigFile": false,
+    "babelOptions": {
+      "presets": [["@babel/preset-react", { "runtime": "automatic" }]]
+    }
   },
-  parserOptions: {
-    sourceType: "module"
+  "extends": "airbnb-base",
+  "env": {
+    "es6": true,
+    "browser": true
   },
-  settings: {
+  "settings": {
     "import/resolver": "webpack"
   },
-  rules: {
-    "no-console": 0
+  "rules": {
+    "no-console": 0,
+    "no-restricted-syntax": 0,
+    "react/prop-types": 0
   }
 }

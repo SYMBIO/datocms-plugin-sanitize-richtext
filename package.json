@@ -7,11 +7,12 @@
   "scripts": {
     "start": "concurrently \"yarn dev\" \"yarn localtunnel\"",
     "localtunnel": "lt -s datocms-plugin-datocms-plugin-sanitize-richtext --port 5000",
-    "dev": "NODE_ENV=development webpack-dev-server --port 5000",
-    "dist": "NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production webpack --progress",
-    "build": "NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production webpack --progress",
+    "dev": "NODE_ENV=development webpack-dev-server",
+    "dist": "NODE_ENV=production webpack --progress",
+    "build": "NODE_ENV=production webpack --progress",
     "prepublishOnly": "rimraf lib public && mkdir public && npm run dist",
     "addToProject": "yo datocms-plugin:add-to-project",
+    "lint": "eslint src",
     "test": "node test/sanitize.test.js"
   },
   "keywords": [
@@ -34,41 +35,39 @@
     "previewImage": "docs/preview.gif",
     "coverImage": "docs/cover.png",
     "entryPoint": "public/index.html",
-    "pluginType": "field_addon",
-    "fieldTypes": [
-      "text"
-    ],
     "parameters": {
       "global": [],
       "instance": []
     }
   },
   "devDependencies": {
-    "@babel/cli": "^7.11.6",
-    "@babel/core": "^7.11.6",
-    "@babel/preset-env": "^7.11.5",
-    "@babel/register": "^7.11.5",
-    "babel-eslint": "^10.1.0",
-    "babel-loader": "^8.1.0",
+    "@babel/cli": "^7.29.7",
+    "@babel/core": "^7.29.7",
+    "@babel/eslint-parser": "^7.29.7",
+    "@babel/preset-env": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/register": "^7.29.7",
+    "babel-loader": "9",
     "concurrently": "^5.3.0",
+    "css-loader": "^7.1.4",
     "eslint": "^7.10.0",
     "eslint-config-airbnb-base": "^14.2.0",
     "eslint-import-resolver-webpack": "^0.13.0",
-    "eslint-loader": "^4.0.2",
     "eslint-plugin-import": "^2.22.1",
     "generator-datocms-plugin": "^1.0.26",
-    "html-webpack-inline-source-plugin": "^0.0.10",
-    "html-webpack-plugin": "^4.5.0",
-    "html-webpack-tags-plugin": "^2.0.17",
+    "html-webpack-plugin": "5",
     "localtunnel": "^2.0.0",
-    "mini-css-extract-plugin": "^0.11.2",
     "serve": "^11.3.2",
-    "webpack": "^4.44.2",
-    "webpack-cli": "^3.3.12",
-    "webpack-dev-server": "^3.11.0",
+    "style-loader": "^4.0.0",
+    "webpack": "5",
+    "webpack-cli": "5",
+    "webpack-dev-server": "5",
     "yo": "^3.1.1"
   },
   "dependencies": {
-    "sanitize-html": "2.0.0"
+    "datocms-plugin-sdk": "^2.1.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "sanitize-html": "^2.17.4"
   }
 }
