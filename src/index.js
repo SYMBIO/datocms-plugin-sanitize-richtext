@@ -174,6 +174,9 @@ async function beforeSave(payload, ctx) {
 
   function checkPayloadValue(path, value) {
     if (typeof value === 'string') {
+      // Skip plain-text values (single-line fields, slugs, URLs, …).
+      // Richtext fields always contain HTML tags; plain text never does.
+      if (!/<[a-zA-Z]/.test(value)) return;
       const clean = sanitize(value);
       if (clean !== value) dirty.push({ path, clean });
     } else if (Array.isArray(value)) {
