@@ -2,6 +2,7 @@ import { connect } from 'datocms-plugin-sdk';
 import { createRoot } from 'react-dom/client';
 import { useEffect, useRef } from 'react';
 import { sanitize } from './sanitize';
+import { isWysiwygTextField, collectDirtyWysiwyg, collectItemTypeIds } from './fields';
 
 /* ─── Cross-iframe coordination keys ────────────────────────────────────── */
 
@@ -168,29 +169,39 @@ async function beforeSave(payload, ctx) {
     return true;
   }
 
-  // Check for dirty HTML in every string value inside the payload,
-  // recursing into arrays (modular blocks) and nested objects.
-  const dirty = [];
+  // Only inspect WYSIWYG text fields. Textarea / markdown HTML must stay intact.
+  const itemTypeId = payload?.data?.relationships?.item_type?.data?.id;
+  if (!itemTypeId) return true;
 
-  function checkPayloadValue(path, value) {
-    if (typeof value === 'string') {
-      // Skip plain-text values (single-line fields, slugs, URLs, …).
-      // Richtext fields always contain HTML tags; plain text never does.
-      if (!/<[a-zA-Z]/.test(value)) return;
-      const clean = sanitize(value);
-      if (clean !== value) dirty.push({ path, clean });
-    } else if (Array.isArray(value)) {
-      value.forEach((item, idx) => checkPayloadValue(`${path}.${idx}`, item));
-    } else if (value && typeof value === 'object') {
-      for (const [k, v] of Object.entries(value)) {
-        checkPayloadValue(`${path}.${k}`, v);
+  const formValues = (ctx.formValues && typeof ctx.formValues === 'object')
+    ? ctx.formValues
+    : payloadAttrs;
+
+  // ctx.fields only contains fields already loaded by the app. Load the field
+  // definitions of the record's model and of every block model present in the
+  // values, otherwise unknown fields would be silently skipped.
+  const fieldsById = { ...ctx.fields };
+  if (typeof ctx.loadItemTypeFields === 'function') {
+    const loadedItemTypeIds = new Set(
+      Object.values(fieldsById)
+        .filter((f) => f?.relationships?.item_type?.data?.id)
+        .map((f) => f.relationships.item_type.data.id),
+    );
+    const neededItemTypeIds = new Set(
+      collectItemTypeIds(formValues, [itemTypeId]),
+    );
+    for (const id of neededItemTypeIds) {
+      if (!loadedItemTypeIds.has(id)) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const loaded = await ctx.loadItemTypeFields(id);
+          loaded.forEach((f) => { fieldsById[f.id] = f; });
+        } catch (e) { /* keep whatever we already have */ }
       }
     }
   }
 
-  for (const [key, value] of Object.entries(payloadAttrs)) {
-    checkPayloadValue(key, value);
-  }
+  const dirty = collectDirtyWysiwyg(formValues, itemTypeId, fieldsById, sanitize);
 
   if (dirty.length === 0) return true;
 
@@ -233,11 +244,10 @@ connect({
   onBoot() {},
 
   overrideFieldExtensions(field, ctx) {
-    if (field.attributes.field_type !== 'text') return undefined;
+    // Only HTML/WYSIWYG editors. Textarea and markdown keep raw markup.
+    if (!isWysiwygTextField(field)) return undefined;
     const itemTypeId = field.relationships.item_type.data.id;
     const itemType = ctx.itemTypes[itemTypeId];
-    // Apply to all multiple-paragraph text (HTML/WYSIWYG) fields,
-    // including text fields inside block models.
     if (!itemType) return undefined;
     return { addons: [{ id: 'sanitize-richtext' }] };
   },

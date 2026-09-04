@@ -13,7 +13,7 @@
     "prepublishOnly": "rimraf lib public && mkdir public && npm run dist",
     "addToProject": "yo datocms-plugin:add-to-project",
     "lint": "eslint src",
-    "test": "node test/sanitize.test.js"
+    "test": "node test/sanitize.test.js && node test/fields.test.js"
   },
   "keywords": [
     "datocms",
